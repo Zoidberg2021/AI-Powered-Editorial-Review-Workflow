@@ -1,0 +1,302 @@
+{
+  "name": "Editorial Notes",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ],
+      "id": "d0f2a1db-ca40-4717-9b77-5028936fdbd8",
+      "name": "When clicking \u2018Execute workflow\u2019"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "<GOOGLE_DOC_ID>"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        224,
+        160
+      ],
+      "id": "003306f0-9179-4a23-b702-905d111bfdcc",
+      "name": "Get Characters",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "<GOOGLE_CREDENTIAL_ID>",
+          "name": "Google Docs Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "<GOOGLE_DOC_ID>"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        448,
+        160
+      ],
+      "id": "004cfbe9-c810-414a-a67d-3d2293afa2b2",
+      "name": "Get Outline",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "<GOOGLE_CREDENTIAL_ID>",
+          "name": "Google Docs Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "<GOOGLE_DOC_ID>"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        672,
+        160
+      ],
+      "id": "507a6576-89be-402a-b88a-30f868d05bb5",
+      "name": "Get Style Sheet",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "<GOOGLE_CREDENTIAL_ID>",
+          "name": "Google Docs Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "<GOOGLE_DOC_ID>"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        896,
+        160
+      ],
+      "id": "b5492f86-c923-41fa-b148-4737318f41ac",
+      "name": "Get Novel",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "<GOOGLE_CREDENTIAL_ID>",
+          "name": "Google Docs Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const characters = $('Get Characters').first().json.content;\nconst outline = $('Get Outline').first().json.content;\nconst styleSheet = $('Get Style Sheet').first().json.content;\nconst novel = $('Get Novel').first().json.content;\n\nreturn [{\n  json: {\n    characters,\n    outline,\n    styleSheet,\n    novel\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        160
+      ],
+      "id": "8b582d4f-afe1-4b6c-8578-3f500b265a55",
+      "name": "Merge Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const novel = $('Merge Context').first().json.novel;\nconst outline = $('Merge Context').first().json.outline;\nconst characters = $('Merge Context').first().json.characters;\nconst styleSheet = $('Merge Context').first().json.styleSheet;\n\n// Parse chapter breaks from the novel\nconst chapterRegex = /Chapter \\d+:\\s*[^\\n]+/g;\nconst chapters = [];\nlet match;\nconst matches = [];\n\nwhile ((match = chapterRegex.exec(novel)) !== null) {\n  matches.push({ title: match[0].trim(), index: match.index });\n}\n\nfor (let i = 0; i < matches.length; i++) {\n  const start = matches[i].index;\n  const end = i + 1 < matches.length ? matches[i + 1].index : novel.length;\n  chapters.push({\n    chapterNumber: i + 1,\n    chapterTitle: matches[i].title,\n    chapterText: novel.slice(start, end).trim(),\n    outline,\n    characters,\n    styleSheet\n  });\n}\n\nreturn chapters.map(ch => ({ json: ch }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        160
+      ],
+      "id": "96666ea6-4d74-4e04-aaa1-6940aec238f5",
+      "name": "Parse Chapters"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1568,
+        160
+      ],
+      "id": "29edaba3-affc-4076-a324-c8daadede3d5",
+      "name": "Chapter Loop"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://<OLLAMA_HOST>:<PORT>/api/chat',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: {\n    model: '<MODEL_NAME>',\n    messages: [{\n      role: 'user',\n      content: `You are a professional literary editor reviewing a novel chapter. Analyze the chapter below against the reference materials and produce structured editorial notes.\n\nFORMAT YOUR RESPONSE EXACTLY LIKE THIS:\n\nCHAPTER ${item.chapterNumber}: ${item.chapterTitle}\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\nCONTINUITY ISSUES:\n[List any continuity errors found. For each issue specify the exact location as \"Para X\" or quote the relevant sentence. If none found, write \"None identified.\"]\n\nEDITORIAL NOTES:\n[List structural, pacing, or narrative issues. Be specific about location. If none found, write \"None identified.\"]\n\nAI PROSE FLAGS:\n[List any phrases or patterns from the anti-AI filter or generic AI writing that appear in this chapter. Quote the exact phrase and note its location. If none found, write \"None identified.\"]\n\nMISSING OUTLINE BEATS:\n[List any beats from the outline that appear to be missing or underdeveloped in the chapter. If none found, write \"None identified.\"]\n\nSTRENGTHS:\n[Note 2-3 things working well in this chapter.]\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\nREFERENCE MATERIALS:\n\nOUTLINE FOR THIS CHAPTER:\n${item.outline}\n\nCHARACTER BIBLE:\n${item.characters}\n\nSTYLE SHEET:\n${item.styleSheet}\n\nCHAPTER TEXT TO ANALYZE:\n${item.chapterText}`\n    }],\n    stream: false\n  },\n  json: true\n});\n\nconst notes = response.message.content;\n\nreturn {\n  chapterNumber: item.chapterNumber,\n  chapterTitle: item.chapterTitle,\n  notes\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        80
+      ],
+      "id": "64f5f2dc-2b55-4eec-804b-27326a92ba21",
+      "name": "Analyze Chapter"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "<GOOGLE_DOC_ID>",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "=={{ $json.notes + \"\\n\\n\" }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        160
+      ],
+      "id": "10497134-59c2-4df4-a51b-829118dd7de7",
+      "name": "Update a document",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "<GOOGLE_CREDENTIAL_ID>",
+          "name": "Google Docs Credential"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking \u2018Execute workflow\u2019": {
+      "main": [
+        [
+          {
+            "node": "Get Characters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Characters": {
+      "main": [
+        [
+          {
+            "node": "Get Outline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Outline": {
+      "main": [
+        [
+          {
+            "node": "Get Style Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Style Sheet": {
+      "main": [
+        [
+          {
+            "node": "Get Novel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Novel": {
+      "main": [
+        [
+          {
+            "node": "Merge Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Context": {
+      "main": [
+        [
+          {
+            "node": "Parse Chapters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Chapters": {
+      "main": [
+        [
+          {
+            "node": "Chapter Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chapter Loop": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Analyze Chapter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Chapter": {
+      "main": [
+        [
+          {
+            "node": "Update a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a document": {
+      "main": [
+        [
+          {
+            "node": "Chapter Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "abf4cbd8-3e05-4875-b297-67111c326520",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "<INSTANCE_ID>"
+  },
+  "id": "btAvzwnvsOHSDOt9",
+  "tags": []
+}
